@@ -1,0 +1,236 @@
+{
+  "info": {
+    "_postman_id": "b7e1c7e2-2c3a-4b7a-9e2a-1a2b3c4d5e6f",
+    "name": "SocialSync WhatsApp Service API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Postman collection for all WhatsApp backend API endpoints."
+  },
+  "item": [
+    {
+      "name": "Connect WhatsApp",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "{{baseUrl}}/connect", "host": ["{{baseUrl}}"], "path": ["connect"] }
+      }
+    },
+    {
+      "name": "Send Message",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": { "mode": "raw", "raw": "{\n  \"to\": \"recipient_number_or_name\",\n  \"message\": \"Hello!\"\n}" },
+        "url": { "raw": "{{baseUrl}}/send", "host": ["{{baseUrl}}"], "path": ["send"] }
+      }
+    },
+    {
+      "name": "Schedule Message",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": { "mode": "raw", "raw": "{\n  \"to\": \"recipient_number_or_name\",\n  \"message\": \"Scheduled message\",\n  \"date\": \"2025-05-25T10:00:00.000Z\"\n}" },
+        "url": { "raw": "{{baseUrl}}/schedule", "host": ["{{baseUrl}}"], "path": ["schedule"] }
+      }
+    },
+    {
+      "name": "Get Unread Messages",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "{{baseUrl}}/unread?contact=recipient_number_or_name", "host": ["{{baseUrl}}"], "path": ["unread"], "query": [{"key": "contact", "value": "recipient_number_or_name"}] }
+      }
+    },
+    {
+      "name": "Get Messages",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "{{baseUrl}}/messages?contact=recipient_number_or_name", "host": ["{{baseUrl}}"], "path": ["messages"], "query": [{"key": "contact", "value": "recipient_number_or_name"}] }
+      }
+    },
+    {
+      "name": "Search Messages",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "{{baseUrl}}/search?query=search_term", "host": ["{{baseUrl}}"], "path": ["search"], "query": [{"key": "query", "value": "search_term"}] }
+      }
+    },
+    {
+      "name": "Send Media",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": { "mode": "formdata", "formdata": [
+          { "key": "to", "value": "recipient_number_or_name", "type": "text" },
+          { "key": "file", "type": "file" },
+          { "key": "caption", "value": "optional caption", "type": "text" }
+        ] },
+        "url": { "raw": "{{baseUrl}}/media/send", "host": ["{{baseUrl}}"], "path": ["media", "send"] }
+      }
+    },
+    {
+      "name": "Download Media",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "{{baseUrl}}/media/download?contact=recipient_number_or_name&date=2025-05-25&count=1", "host": ["{{baseUrl}}"], "path": ["media", "download"], "query": [
+          {"key": "contact", "value": "recipient_number_or_name"},
+          {"key": "date", "value": "2025-05-25"},
+          {"key": "count", "value": "1"}
+        ] }
+      }
+    },
+    {
+      "name": "Add Group Participant",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": { "mode": "raw", "raw": "{\n  \"groupId\": \"group_id\",\n  \"participantId\": \"participant_id\"\n}" },
+        "url": { "raw": "{{baseUrl}}/group/add", "host": ["{{baseUrl}}"], "path": ["group", "add"] }
+      }
+    },
+    {
+      "name": "Remove Group Participant",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": { "mode": "raw", "raw": "{\n  \"groupId\": \"group_id\",\n  \"participantId\": \"participant_id\"\n}" },
+        "url": { "raw": "{{baseUrl}}/group/remove", "host": ["{{baseUrl}}"], "path": ["group", "remove"] }
+      }
+    },
+    {
+      "name": "Promote Group Participant",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": { "mode": "raw", "raw": "{\n  \"groupId\": \"group_id\",\n  \"participantId\": \"participant_id\"\n}" },
+        "url": { "raw": "{{baseUrl}}/group/promote", "host": ["{{baseUrl}}"], "path": ["group", "promote"] }
+      }
+    },
+    {
+      "name": "Demote Group Participant",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": { "mode": "raw", "raw": "{\n  \"groupId\": \"group_id\",\n  \"participantId\": \"participant_id\"\n}" },
+        "url": { "raw": "{{baseUrl}}/group/demote", "host": ["{{baseUrl}}"], "path": ["group", "demote"] }
+      }
+    },
+    {
+      "name": "Get Group Info",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "{{baseUrl}}/group/info?groupId=group_id", "host": ["{{baseUrl}}"], "path": ["group", "info"], "query": [{"key": "groupId", "value": "group_id"}] }
+      }
+    },
+    {
+      "name": "Set Group Subject",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": { "mode": "raw", "raw": "{\n  \"groupId\": \"group_id\",\n  \"subject\": \"New Subject\"\n}" },
+        "url": { "raw": "{{baseUrl}}/group/subject", "host": ["{{baseUrl}}"], "path": ["group", "subject"] }
+      }
+    },
+    {
+      "name": "Set Group Description",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": { "mode": "raw", "raw": "{\n  \"groupId\": \"group_id\",\n  \"description\": \"New Description\"\n}" },
+        "url": { "raw": "{{baseUrl}}/group/description", "host": ["{{baseUrl}}"], "path": ["group", "description"] }
+      }
+    },
+    {
+      "name": "Get Contact Info",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "{{baseUrl}}/contact/info?contactId=recipient_number_or_name", "host": ["{{baseUrl}}"], "path": ["contact", "info"], "query": [{"key": "contactId", "value": "recipient_number_or_name"}] }
+      }
+    },
+    {
+      "name": "Get Contact Profile Pic",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "{{baseUrl}}/contact/profile-pic?contactId=recipient_number_or_name", "host": ["{{baseUrl}}"], "path": ["contact", "profile-pic"], "query": [{"key": "contactId", "value": "recipient_number_or_name"}] }
+      }
+    },
+    {
+      "name": "Send Location",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": { "mode": "raw", "raw": "{\n  \"to\": \"recipient_number_or_name\",\n  \"latitude\": 12.9716,\n  \"longitude\": 77.5946,\n  \"description\": \"Bangalore\"\n}" },
+        "url": { "raw": "{{baseUrl}}/message/location", "host": ["{{baseUrl}}"], "path": ["message", "location"] }
+      }
+    },
+    {
+      "name": "Send Sticker",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": { "mode": "formdata", "formdata": [
+          { "key": "to", "value": "recipient_number_or_name", "type": "text" },
+          { "key": "file", "type": "file" }
+        ] },
+        "url": { "raw": "{{baseUrl}}/message/sticker", "host": ["{{baseUrl}}"], "path": ["message", "sticker"] }
+      }
+    },
+    {
+      "name": "Send Document",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": { "mode": "formdata", "formdata": [
+          { "key": "to", "value": "recipient_number_or_name", "type": "text" },
+          { "key": "file", "type": "file" },
+          { "key": "filename", "value": "optional_filename.pdf", "type": "text" }
+        ] },
+        "url": { "raw": "{{baseUrl}}/message/document", "host": ["{{baseUrl}}"], "path": ["message", "document"] }
+      }
+    },
+    {
+      "name": "Reply to Message",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": { "mode": "raw", "raw": "{\n  \"to\": \"recipient_number_or_name\",\n  \"message\": \"Reply text\",\n  \"quotedMsgId\": \"message_id\"\n}" },
+        "url": { "raw": "{{baseUrl}}/message/reply", "host": ["{{baseUrl}}"], "path": ["message", "reply"] }
+      }
+    },
+    {
+      "name": "React to Message",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": { "mode": "raw", "raw": "{\n  \"to\": \"recipient_number_or_name\",\n  \"msgId\": \"message_id\",\n  \"emoji\": \"👍\"\n}" },
+        "url": { "raw": "{{baseUrl}}/message/react", "host": ["{{baseUrl}}"], "path": ["message", "react"] }
+      }
+    },
+    {
+      "name": "Mention User",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": { "mode": "raw", "raw": "{\n  \"to\": \"group_id\",\n  \"message\": \"Hello @user!\",\n  \"mentions\": [\"user_id\"]\n}" },
+        "url": { "raw": "{{baseUrl}}/message/mention", "host": ["{{baseUrl}}"], "path": ["message", "mention"] }
+      }
+    },
+    {
+      "name": "Set Webhook",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": { "mode": "raw", "raw": "{\n  \"url\": \"https://your-webhook-url.com\"\n}" },
+        "url": { "raw": "{{baseUrl}}/webhook", "host": ["{{baseUrl}}"], "path": ["webhook"] }
+      }
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "name": "whatsapp",
+  "version": "1.0.0",
+  "description": "This service handles WhatsApp integration using whatsapp-web.js. Built with TypeScript/Node.js.",
+  "main": "index.js",
+  "scripts": {
+    "dev": "ts-node-dev --respawn --transpile-only index.ts",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@types/express": "^5.0.2",
+    "express": "^5.1.0",
+    "file-type": "^21.0.0",
+    "qrcode": "^1.5.4",
+    "uuid": "^11.1.0",
+    "whatsapp-web.js": "^1.23.0",
+    "winston": "^3.17.0",
+    "winston-daily-rotate-file": "^5.0.0",
+    "zod": "^3.25.28"
+  },
+  "devDependencies": {
+    "@types/mime-types": "^2.1.4",
+    "@types/multer": "^1.4.12",
+    "@types/qrcode": "^1.5.5",
+    "multer": "^2.0.0",
+    "ts-node": "^10.9.2",
+    "ts-node-dev": "^2.0.0"
+  }
+}
