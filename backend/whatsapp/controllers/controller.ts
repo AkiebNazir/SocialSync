@@ -1,7 +1,7 @@
 // WhatsApp controllers (request handlers)
 
 import { Request, Response } from 'express';
-import fs from 'fs';
+import fs, { promises as fsPromises } from 'fs';
 import path from 'path';
 import { startWhatsAppSession, sendMessage, scheduleMessage, getUnreadMessages, getMessages, searchMessages, sendMedia, downloadMedia, downloadMediaByContact, isClientReady, resolveContactJid, getClient } from '../services/service';
 import { sendMessageSchema, scheduleMessageSchema } from '../utils/validation';
@@ -11,6 +11,7 @@ import * as contactService from '../services/contact';
 import * as messageAdvanced from '../services/messageAdvanced';
 import * as webhookService from '../services/webhook';
 import * as mediaService from '../services/mediaService';
+import { reconnectWhatsApp } from '../services/service'; // Import the new service function
 
 // Controller to start WhatsApp session and return QR code as PNG file
 export const connectWhatsApp = async (req: Request, res: Response) => {
@@ -43,6 +44,18 @@ export const connectWhatsApp = async (req: Request, res: Response) => {
     }
 };
 
+// Controller to trigger session check and re-connection
+export const reconnectWhatsAppController = async (req: Request, res: Response) => {
+    try {
+        console.log('[API][RECONNECT] Attempting to reconnect WhatsApp session...');
+        await reconnectWhatsApp();
+        res.json({ success: true, message: 'WhatsApp re-connection process initiated. Check logs for status.' });
+    } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        console.error('[API][RECONNECT][ERROR]', errorMsg);
+        res.status(500).json({ error: `Failed to initiate re-connection: ${errorMsg}` });
+    }
+};
 // TODO: Add OTP-based authentication controller
 
 export const sendMessageController = async (req: Request, res: Response) => {
@@ -52,11 +65,6 @@ export const sendMessageController = async (req: Request, res: Response) => {
     }
     const { to, message } = parse.data;
     try {
-        const client = await getClient();
-        if (!isClientReady) {
-            console.error(`[API][SEND][ERROR] WhatsApp client is not ready. Please connect and scan the QR code.`);
-            return res.status(503).json({ error: 'WhatsApp client is not ready. Please connect and scan the QR code.' });
-        }
         const jid = await resolveContactJid(to);
         if (!jid) {
             console.error(`[API][SEND][ERROR] Could not resolve contact/JID for:`, to);
@@ -78,10 +86,6 @@ export const scheduleMessageController = async (req: Request, res: Response) => 
     }
     const { to, message, date } = parse.data;
     try {
-        const client = await getClient();
-        if (!isClientReady) {
-            return res.status(503).json({ error: 'WhatsApp client is not ready. Please connect and scan the QR code.' });
-        }
         // Log the original user-provided date string
         console.log(`[API][SCHEDULE] Requested schedule time (IST, user input):`, date);
         let scheduleDate: Date = parseISTDate(date);
@@ -99,10 +103,6 @@ export const scheduleMessageController = async (req: Request, res: Response) => 
 export const getUnreadMessagesController = async (req: Request, res: Response) => {
     const { contactId } = req.query;
     try {
-        const client = await getClient();
-        if (!isClientReady) {
-            return res.status(503).json({ error: 'WhatsApp client is not ready. Please connect and scan the QR code.' });
-        }
         const unread = await getUnreadMessages(contactId as string);
         res.json(unread);
     } catch (err) {
@@ -115,10 +115,6 @@ export const getUnreadMessagesController = async (req: Request, res: Response) =
 export const getMessagesController = async (req: Request, res: Response) => {
     const { contactId, date } = req.query;
     try {
-        const client = await getClient();
-        if (!isClientReady) {
-            return res.status(503).json({ error: 'WhatsApp client is not ready. Please connect and scan the QR code.' });
-        }
         const messages = await getMessages(contactId as string, date ? new Date(date as string) : undefined);
         res.json(messages);
     } catch (err) {
@@ -131,10 +127,6 @@ export const getMessagesController = async (req: Request, res: Response) => {
 export const searchMessagesController = async (req: Request, res: Response) => {
     const { query, contact } = req.query;
     try {
-        const client = await getClient();
-        if (!isClientReady) {
-            return res.status(503).json({ error: 'WhatsApp client is not ready. Please connect and scan the QR code.' });
-        }
         const results = await searchMessages(query as string, contact as string | undefined);
         res.json(results);
     } catch (err) {
@@ -184,7 +176,7 @@ export const sendMediaController = async (req: Request, res: Response) => {
         // Clean up uploaded files
         for (const filePath of filePaths) {
             try {
-                await fs.promises.unlink(filePath);
+                await fsPromises.unlink(filePath);
             } catch (err) {
                 console.error(`[API][SEND_MEDIA][CLEANUP] Failed to delete file ${filePath}:`, err);
             }
@@ -216,10 +208,6 @@ export const sendMediaController = async (req: Request, res: Response) => {
 
 export const getMediaInfoController = async (req: Request, res: Response) => {
     try {
-        const client = await getClient();
-        if (!isClientReady) {
-            return res.status(503).json({ error: 'WhatsApp client is not ready. Please connect and scan the QR code.' });
-        }
 
         const reqAny = req as any;
         if (!reqAny.file) {
@@ -230,7 +218,7 @@ export const getMediaInfoController = async (req: Request, res: Response) => {
         
         // Clean up the uploaded file
         try {
-            await fs.promises.unlink(reqAny.file.path);
+            await fsPromises.unlink(reqAny.file.path);
         } catch (err) {
             console.error(`[API][MEDIA_INFO][CLEANUP] Failed to delete file ${reqAny.file.path}:`, err);
         }
@@ -246,10 +234,6 @@ export const getMediaInfoController = async (req: Request, res: Response) => {
 export const downloadMediaController = async (req: Request, res: Response) => {
     const { contact, date, count } = req.query;
     try {
-        const client = await getClient();
-        if (!isClientReady) {
-            return res.status(503).json({ error: 'WhatsApp client is not ready. Please connect and scan the QR code.' });
-        }
 
         if (!contact) return res.status(400).json({ error: 'Contact (number or name) is required' });
         let parsedDate: Date | undefined = undefined;

@@ -8,6 +8,7 @@ import { saveSession, loadSession, invalidateSession, restoreLatestBackup, SESSI
 import { WhatsAppError } from '../utils/errors';
 import { registerEventHandlers } from './webhook';
 import { registerErrorHandlers } from './errorDetection';
+import { sendMedia, downloadMedia } from './mediaService'; // Import from mediaService
 import { createLogger } from '../utils/logger';
 
 // Create context-specific loggers
@@ -1068,7 +1069,7 @@ export const searchMessages = async (query: string, contact?: string) => {
 // --- Send media to multiple recipients with multiple files ---
 export const sendBulkMedia = async (to: string | string[], filePaths: string[], options: { caption?: string } = {}) => {
     try {
-        // Normalize recipients array
+ logger.info('[SEND_BULK_MEDIA] Starting bulk media send operation.');
         const recipients = Array.isArray(to) 
             ? to 
             : typeof to === 'string' 
@@ -1079,10 +1080,6 @@ export const sendBulkMedia = async (to: string | string[], filePaths: string[], 
         logger.debug(`[SEND_BULK_MEDIA] Files: ${filePaths.join(', ')}`);
         logger.debug(`[SEND_BULK_MEDIA] Recipients: ${recipients.join(', ')}`);
 
-        const client = await getClient();
-        if (!isClientReady) {
-            throw new WhatsAppError('CLIENT_NOT_READY', 'WhatsApp client is not ready. Please connect and scan the QR code.');
-        }
 
         // Validate inputs
         if (recipients.length === 0) {
@@ -1093,6 +1090,7 @@ export const sendBulkMedia = async (to: string | string[], filePaths: string[], 
         }
 
         // Validate and resolve all recipients first
+ logger.debug('[SEND_BULK_MEDIA] Resolving recipients.');
         const resolvedRecipients = await Promise.all(
             recipients.map(async (recipient) => {
                 const jid = await resolveContactJid(recipient);
@@ -1107,6 +1105,7 @@ export const sendBulkMedia = async (to: string | string[], filePaths: string[], 
         const uniqueRecipients = resolvedRecipients.filter((recipient, index, self) =>
             index === self.findIndex((r) => r.jid === recipient.jid)
         );
+ logger.info(`[SEND_BULK_MEDIA] Resolved ${recipients.length} input recipients to ${uniqueRecipients.length} unique JIDs.`);
 
         logger.debug(`[SEND_BULK_MEDIA] Resolved ${uniqueRecipients.length} unique recipients`);
 
@@ -1114,19 +1113,8 @@ export const sendBulkMedia = async (to: string | string[], filePaths: string[], 
         for (const filePath of filePaths) {
             if (!fs.existsSync(filePath)) {
                 throw new WhatsAppError('FILE_NOT_FOUND', `File not found: ${filePath}`);
-            }
+ }
         }
-
-        // Create MessageMedia objects for all files
-        const mediaObjects = await Promise.all(
-            filePaths.map(async (filePath) => {
-                try {
-                    return await MessageMedia.fromFilePath(filePath);
-                } catch (err) {
-                    throw new WhatsAppError('MEDIA_CREATION_FAILED', `Failed to create media from file: ${filePath}`, { originalError: err });
-                }
-            })
-        );
 
         // Send all files to all recipients
         const results = {
@@ -1136,19 +1124,14 @@ export const sendBulkMedia = async (to: string | string[], filePaths: string[], 
 
         for (const { original: recipient, jid } of uniqueRecipients) {
             try {
+ logger.debug(`[SEND_BULK_MEDIA] Sending files to recipient: ${recipient} (${jid})`);
                 const sentFiles: string[] = [];
                 
-                for (const [index, media] of mediaObjects.entries()) {
-                    const message = await client.sendMessage(jid, media, options.caption ? { caption: options.caption } : {});
-                    sentFiles.push(filePaths[index]);
-                    logger.debug(`[SEND_BULK_MEDIA] Sent file ${filePaths[index]} to ${jid}`);
+ for (const filePath of filePaths) {
+ await sendMedia(jid, filePath, options.caption); // Use mediaService function
+ sentFiles.push(filePath);
                 }
-
-                results.success.push({
-                    recipient,
-                    jid,
-                    files: sentFiles
-                });
+ results.success.push({ recipient, jid, files: sentFiles });
                 
                 logger.info(`[SEND_BULK_MEDIA][SUCCESS] All files sent to ${recipient}`);
             } catch (error) {

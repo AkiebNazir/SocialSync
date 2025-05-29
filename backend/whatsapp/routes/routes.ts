@@ -25,7 +25,8 @@ import {
   reactToMessageController,
   mentionUserController,
   setWebhookController,
-  getMediaInfoController,
+ getMediaInfoController,
+  reconnectWhatsAppController,
   healthCheckController
 } from '../controllers/controller';
 import path from 'path';
@@ -54,6 +55,9 @@ function getUploadMiddleware() {
 
 // Route to start WhatsApp session and get QR code
 router.get('/connect', asyncHandler(connectWhatsApp));
+
+// Route to trigger WhatsApp session reconnection
+router.get('/reconnect', asyncHandler(reconnectWhatsAppController));
 
 // TODO: Add OTP-based authentication route
 
