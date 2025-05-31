@@ -32,7 +32,7 @@ process.on('SIGINT', async () => {
 
 // Handle file change events (for development)
 if (process.env.NODE_ENV === 'development') {
-    process.on('message', async (message) => {
+    process.on('message', async (message: any) => {
         if (message.type === 'restart' && !isReconnecting) {
             isReconnecting = true;
             logger.info('Restart detected, reinitializing WhatsApp client...');

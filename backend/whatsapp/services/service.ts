@@ -8,14 +8,27 @@ import { saveSession, loadSession, invalidateSession, restoreLatestBackup, SESSI
 import { WhatsAppError } from '../utils/errors';
 import { registerEventHandlers } from './webhook';
 import { registerErrorHandlers } from './errorDetection';
-import { sendMedia, downloadMedia } from './mediaService'; // Import from mediaService
+// import { sendMedia, downloadMedia } from './mediaService'; // Import from mediaService
 import { createLogger } from '../utils/logger';
+import { cli } from 'winston/lib/winston/config';
 
 // Create context-specific loggers
 const logger = createLogger('WHATSAPP-SERVICE');
 const resolveLogger = createLogger('WHATSAPP-RESOLVE');
 const clientLogger = createLogger('WHATSAPP-CLIENT');
 const sessionLogger = createLogger('WHATSAPP-SESSION');
+
+
+let client: Client | null = null;
+let isClientReady = false;
+let lastQrDataUrl: string | null = null;
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 5;
+const RECONNECT_BASE_DELAY = 5000; // 5 seconds
+const RECONNECT_MAX_DELAY = 30000; // 30 seconds
+const RECONNECT_JITTER = 1000; // 1 second
+
+let isReconnecting = false;
 
 // --- Utility: validateStringInput ---
 function validateStringInput(value: any, label: string) {
@@ -166,17 +179,6 @@ function debounce<T extends (...args: any[]) => void>(fn: T, delay: number): T {
     }) as T;
 }
 
-let client: Client | null = null;
-let isClientReady = false;
-let lastQrDataUrl: string | null = null;
-let reconnectAttempts = 0;
-const MAX_RECONNECT_ATTEMPTS = 5;
-const RECONNECT_BASE_DELAY = 5000; // 5 seconds
-const RECONNECT_MAX_DELAY = 30000; // 30 seconds
-const RECONNECT_JITTER = 1000; // 1 second
-
-let isReconnecting = false;
-
 // Add type for pending requests
 interface PendingRequest<T> {
     operation: () => Promise<T>;
@@ -227,22 +229,26 @@ class SessionError extends WhatsAppError {
         this.name = 'SessionError';
     }
 }
+const sessionDir = path.join(__dirname, 'sessions');
 
-function createClient() {
+function createClient(): Client {
     // Create session directory if it doesn't exist
-    const sessionDir = path.join(__dirname, 'sessions');
     if (!fs.existsSync(sessionDir)) {
         fs.mkdirSync(sessionDir, { recursive: true });
     }
 
     // Create client with LocalAuth
-    return new Client({
+    client =  new Client({
         authStrategy: new LocalAuth({
             clientId: "whatsapp-client",
             dataPath: sessionDir
         }),
         puppeteer: getPuppeteerConfig()
     });
+    setupClientEventHandlers(client);
+    client.initialize();
+
+    return client;
 }
 
 function getPuppeteerConfig() {
@@ -285,24 +291,6 @@ function getPuppeteerConfig() {
 }
 
 function setupClientEventHandlers(client: Client) {
-    client.on('session', (session) => {
-        saveSessionDebounced(session);
-        console.log('✅ [WHATSAPP][SESSION] Session data received and saved.');
-        lastSessionState = {
-            isAuthenticated: true,
-            timestamp: Date.now()
-        };
-        clearContactCache(); // Clear cache on new session
-    });
-
-    client.on('authenticated', () => {
-        console.log('✅ [WHATSAPP][AUTH] Successfully authenticated. Session is now active.');
-        lastSessionState = {
-            isAuthenticated: true,
-            timestamp: Date.now()
-        };
-        clearContactCache(); // Clear cache on authentication
-    });
 
     client.on('auth_failure', (msg) => {
         isClientReady = false;
@@ -312,14 +300,8 @@ function setupClientEventHandlers(client: Client) {
         // Only invalidate session if it's a true auth failure
         if (msg === 'LOGOUT') {
             console.log('🔄 [WHATSAPP][SESSION] User logged out from mobile app. Session invalidated.');
-            invalidateSession();
+            // invalidateSession();
             lastSessionState = null;
-        } else {
-            console.log('⚠️ [WHATSAPP][SESSION] Temporary auth failure, attempting to restore session...');
-            // Try to restore the session
-            attemptSessionRestore().catch(err => {
-                console.error('[WHATSAPP][SESSION][ERROR] Failed to restore session:', err);
-            });
         }
     });
 
@@ -331,14 +313,7 @@ function setupClientEventHandlers(client: Client) {
         // Only invalidate session on explicit logout
         if (reason === 'LOGOUT') {
             console.log('🔄 [WHATSAPP][SESSION] User logged out from mobile app. Session invalidated.');
-            invalidateSession();
-            lastSessionState = null;
-        } else {
-            console.log('🔄 [WHATSAPP][CONNECTION] Connection lost, attempting to reconnect...');
-            // Try to restore the session
-            attemptSessionRestore().catch(err => {
-                console.error('[WHATSAPP][SESSION][ERROR] Failed to restore session:', err);
-            });
+
         }
     });
 
@@ -368,26 +343,18 @@ function setupClientEventHandlers(client: Client) {
     });
 
     client.on('qr', (qr) => {
-        // Only show QR if we don't have a valid session
-        if (!lastSessionState || !lastSessionState.isAuthenticated) {
-            isClientReady = false;
-            console.log('🔄 [WHATSAPP][SESSION] Session not found or expired. Generating new QR code...');
-            invalidateSession();
-            qrcode.toDataURL(qr, { errorCorrectionLevel: 'H', margin: 1, width: 300 }, (err, url) => {
-                if (!err && url) {
-                    lastQrDataUrl = url;
-                    console.log('📱 [WHATSAPP][QR] QR code generated. Please scan with your WhatsApp mobile app.');
-                    console.log('ℹ️ [WHATSAPP][QR] Instructions:');
-                    console.log('   1. Open WhatsApp on your phone');
-                    console.log('   2. Tap Menu or Settings and select WhatsApp Web');
-                    console.log('   3. Point your phone to this screen to scan the QR code');
-                } else if (err) {
-                    console.error('[WHATSAPP][ERROR] Failed to generate QR code data URL:', err);
-                }
-            });
-        } else {
-            console.log('⚠️ [WHATSAPP][SESSION] QR code received but session is still valid, ignoring...');
-        }
+        qrcode.toDataURL(qr, { errorCorrectionLevel: 'H', margin: 1, width: 300 }, (err, url) => {
+            if (!err && url) {
+                lastQrDataUrl = url;
+                console.log('📱 [WHATSAPP][QR] QR code generated. Please scan with your WhatsApp mobile app.');
+                console.log('ℹ️ [WHATSAPP][QR] Instructions:');
+                console.log('   1. Open WhatsApp on your phone');
+                console.log('   2. Tap Menu or Settings and select WhatsApp Web');
+                console.log('   3. Point your phone to this screen to scan the QR code');
+            } else if (err) {
+                console.error('[WHATSAPP][ERROR] Failed to generate QR code data URL:', err);
+            }
+        });
     });
 
     client.on('change_state', (state: WAState) => {
@@ -413,116 +380,6 @@ function setupClientEventHandlers(client: Client) {
     });
 }
 
-// Modify restoreSession to be more persistent
-async function restoreSession(): Promise<boolean> {
-    try {
-        const sessionDir = path.join(__dirname, '../sessions/whatsapp-client');
-        if (!fs.existsSync(sessionDir)) {
-            console.log('[WHATSAPP][SESSION] No existing session found');
-            return false;
-        }
-
-        // Check if we have a recent valid session state
-        if (lastSessionState && lastSessionState.isAuthenticated) {
-            const sessionAge = Date.now() - lastSessionState.timestamp;
-            if (sessionAge < 24 * 60 * 60 * 1000) { // 24 hours
-                console.log('[WHATSAPP][SESSION] Using existing valid session state');
-                return true;
-            }
-        }
-
-        console.log('[WHATSAPP][SESSION] Attempting to restore existing session...');
-        client = new Client({
-            authStrategy: new LocalAuth({
-                clientId: 'whatsapp-client',
-                dataPath: path.join(__dirname, '../sessions')
-            }),
-            puppeteer: getPuppeteerConfig()
-        });
-
-        setupClientEventHandlers(client);
-        await client.initialize();
-
-        return new Promise((resolve) => {
-            const timeout = setTimeout(() => {
-                console.log('[WHATSAPP][SESSION] Session restoration timeout');
-                resolve(false);
-            }, 30000);
-
-            const readyHandler = () => {
-                clearTimeout(timeout);
-                client?.removeListener('qr', qrHandler);
-                client?.removeListener('auth_failure', authFailureHandler);
-                console.log('✅ [WHATSAPP][SESSION] Successfully restored session');
-                sessionRestoreAttempts = 0;
-                lastSessionState = {
-                    isAuthenticated: true,
-                    timestamp: Date.now()
-                };
-                resolve(true);
-            };
-
-            const qrHandler = () => {
-                clearTimeout(timeout);
-                client?.removeListener('ready', readyHandler);
-                client?.removeListener('auth_failure', authFailureHandler);
-                // Only consider session expired if we don't have a valid session state
-                if (!lastSessionState || !lastSessionState.isAuthenticated) {
-                    console.log('⚠️ [WHATSAPP][SESSION] Session expired, QR code required');
-                    resolve(false);
-                } else {
-                    console.log('⚠️ [WHATSAPP][SESSION] QR code received but session is still valid, ignoring...');
-                    resolve(true);
-                }
-            };
-
-            const authFailureHandler = () => {
-                clearTimeout(timeout);
-                client?.removeListener('ready', readyHandler);
-                client?.removeListener('qr', qrHandler);
-                console.log('❌ [WHATSAPP][SESSION] Session authentication failed');
-                resolve(false);
-            };
-
-            client?.on('ready', readyHandler);
-            client?.on('qr', qrHandler);
-            client?.on('auth_failure', authFailureHandler);
-        });
-    } catch (error) {
-        console.error('[WHATSAPP][SESSION][ERROR] Failed to restore session:', error);
-        return false;
-    }
-}
-
-// Add automatic session restoration
-async function attemptSessionRestore(): Promise<boolean> {
-    if (sessionRestoreAttempts >= MAX_SESSION_RESTORE_ATTEMPTS) {
-        console.log('[WHATSAPP][SESSION] Max session restore attempts reached');
-        return false;
-    }
-
-    sessionRestoreAttempts++;
-    console.log(`[WHATSAPP][SESSION] Attempting session restore (${sessionRestoreAttempts}/${MAX_SESSION_RESTORE_ATTEMPTS})...`);
-
-    try {
-        const restored = await restoreSession();
-        if (restored) {
-            return true;
-        }
-
-        // If restoration failed and we haven't reached max attempts, try again after delay
-        if (sessionRestoreAttempts < MAX_SESSION_RESTORE_ATTEMPTS) {
-            console.log(`[WHATSAPP][SESSION] Session restore failed, retrying in ${SESSION_RESTORE_DELAY}ms...`);
-            await new Promise(resolve => setTimeout(resolve, SESSION_RESTORE_DELAY));
-            return attemptSessionRestore();
-        }
-
-        return false;
-    } catch (error) {
-        console.error('[WHATSAPP][SESSION][ERROR] Session restore attempt failed:', error);
-        return false;
-    }
-}
 
 // Add null check helper
 function assertClient(client: Client | null): asserts client is Client {
@@ -574,42 +431,9 @@ async function getClient(): Promise<Client> {
     
     if (!client) {
         clientLogger.info('Client not initialized, creating new instance');
-        client = new Client({
-            puppeteer: {
-                headless: true,
-                args: [
-                    '--no-sandbox',
-                    '--disable-setuid-sandbox',
-                    '--disable-dev-shm-usage',
-                    '--disable-accelerated-2d-canvas',
-                    '--no-first-run',
-                    '--no-zygote',
-                    '--disable-gpu'
-                ]
-            }
-        });
+        client = createClient();
+    };
         
-        // Register event handlers
-        const eventHandlers = registerEventHandlers()!;
-        if (eventHandlers) {
-            eventHandlers.onMessage(client);
-            eventHandlers.onMessageAck(client);
-            eventHandlers.onGroupMessage(client);
-            eventHandlers.onGroupParticipants(client);
-            eventHandlers.onContactStatus(client);
-        }
-
-        // Register error handlers
-        const errorHandlers = registerErrorHandlers()!;
-        if (errorHandlers) {
-            errorHandlers.onConnectionError(client);
-            errorHandlers.onAuthenticationError(client);
-            errorHandlers.onMessageError(client);
-            errorHandlers.onMediaError(client);
-            errorHandlers.onGroupError(client);
-        }
-    }
-
     if (!isClientReady) {
         clientLogger.warn('Client not ready, waiting for initialization');
     }

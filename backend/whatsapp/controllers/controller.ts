@@ -11,7 +11,7 @@ import * as contactService from '../services/contact';
 import * as messageAdvanced from '../services/messageAdvanced';
 import * as webhookService from '../services/webhook';
 import * as mediaService from '../services/mediaService';
-import { reconnectWhatsApp } from '../services/service'; // Import the new service function
+// import { reconnectWhatsApp } from '../services/service'; // Import the new service function
 
 // Controller to start WhatsApp session and return QR code as PNG file
 export const connectWhatsApp = async (req: Request, res: Response) => {
@@ -48,7 +48,7 @@ export const connectWhatsApp = async (req: Request, res: Response) => {
 export const reconnectWhatsAppController = async (req: Request, res: Response) => {
     try {
         console.log('[API][RECONNECT] Attempting to reconnect WhatsApp session...');
-        await reconnectWhatsApp();
+        // await reconnectWhatsApp();
         res.json({ success: true, message: 'WhatsApp re-connection process initiated. Check logs for status.' });
     } catch (err) {
         const errorMsg = err instanceof Error ? err.message : String(err);
