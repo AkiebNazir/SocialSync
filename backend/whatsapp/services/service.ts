@@ -30,6 +30,25 @@ const RECONNECT_JITTER = 1000; // 1 second
 
 let isReconnecting = false;
 
+
+// Add session state tracking
+let sessionRestoreAttempts = 0;
+const MAX_SESSION_RESTORE_ATTEMPTS = 3;
+const SESSION_RESTORE_DELAY = 2000; // 2 seconds
+
+// Add session persistence tracking
+let lastSessionState: {
+    isAuthenticated: boolean;
+    timestamp: number;
+} | null = null;
+
+// Add cleanup state tracking
+let isCleaningUp = false;
+let cleanupPromise: Promise<void> | null = null;
+
+// Add initialization state tracking
+let initializationPromise: Promise<void> | null = null;
+
 // --- Utility: validateStringInput ---
 function validateStringInput(value: any, label: string) {
     if (typeof value !== 'string' || !value.trim()) {
@@ -198,23 +217,7 @@ const saveSessionDebounced = debounce((session: any) => {
     }
 }, 500);
 
-// Add session state tracking
-let sessionRestoreAttempts = 0;
-const MAX_SESSION_RESTORE_ATTEMPTS = 3;
-const SESSION_RESTORE_DELAY = 2000; // 2 seconds
 
-// Add session persistence tracking
-let lastSessionState: {
-    isAuthenticated: boolean;
-    timestamp: number;
-} | null = null;
-
-// Add cleanup state tracking
-let isCleaningUp = false;
-let cleanupPromise: Promise<void> | null = null;
-
-// Add initialization state tracking
-let initializationPromise: Promise<void> | null = null;
 
 class ClientInitializationError extends WhatsAppError {
     constructor(message: string, details?: any) {

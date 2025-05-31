@@ -213,7 +213,7 @@ export const getMediaInfoController = async (req: Request, res: Response) => {
         if (!reqAny.file) {
             return res.status(400).json({ error: 'No file provided' });
         }
-
+        
         const info = await mediaService.getMediaInfo(reqAny.file.path);
         
         // Clean up the uploaded file

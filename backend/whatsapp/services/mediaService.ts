@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import { createLogger } from '../utils/logger';
 import fileType from 'file-type';
+import { workerData } from 'worker_threads';
 
 const logger = createLogger('WHATSAPP-MEDIA');
 
@@ -253,7 +254,7 @@ async function getMimeType(filePath: string): Promise<string> {
             filePath,
             error: error instanceof Error ? error.message : 'Unknown error'
         });
-        throw new WhatsAppError('MIME_TYPE_DETECTION_FAILED', 'Failed to detect file type');
+        throw new Error('MIME_TYPE_DETECTION_FAILED: Failed to detect file type');
     }
 }
 
@@ -289,3 +290,46 @@ export async function cleanupMediaFiles(directory: string, maxAgeHours: number =
         });
     }
 } 
+
+// This function retrieves information about a media file without sending it
+export function getMediaInfo(path: any) {
+    return new Promise(async (resolve, reject) => {
+        try {
+            // Validate file path
+            if (!path || typeof path !== 'string') {
+                return reject(new Error('Invalid file path provided'));
+            }
+
+            // Check if file exists
+            if (!fs.existsSync(path)) {
+                return reject(new Error('File does not exist'));
+            }
+
+            // Get file stats
+            const stats = await fs.promises.stat(path);
+            if (stats.size > MAX_FILE_SIZE) {
+                return reject(new Error('File size exceeds WhatsApp limit of 16MB'));
+            }
+
+            // Get MIME type
+            const mimeType = await getMimeType(path);
+            if (!mimeType) {
+                return reject(new Error('Could not determine file type'));
+            }
+
+            // Check if MIME type is supported
+            const isSupported = Object.values(SUPPORTED_MEDIA_TYPES).some(types => types.includes(mimeType));
+            if (!isSupported) {
+                return reject(new Error('File type not supported by WhatsApp'));
+            }
+
+            resolve({
+                valid: true,
+                type: mimeType,
+                size: stats.size
+            });
+        } catch (error) {
+            reject(error instanceof Error ? error : new Error('Unknown error occurred'));
+        }
+    });
+}
