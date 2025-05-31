@@ -3,7 +3,6 @@ import { getClient, isClientReady, validateStringInput, resolveContactJid } from
 import path from 'path';
 import fs from 'fs';
 import { createLogger } from '../utils/logger';
-import { WhatsAppError } from '../utils/errors';
 import fileType from 'file-type';
 
 const logger = createLogger('WHATSAPP-MEDIA');
@@ -37,12 +36,21 @@ interface SendMediaResult {
     error?: string;
 }
 
+// Use dynamic import for file-type to avoid 'exports' issue
+async function getFileType(filePath: string): Promise<fileType.FileTypeResult | undefined> {
+    try {
+        const { fileTypeFromFile } = await import('file-type');
+        return await fileTypeFromFile(filePath);
+    } catch (error) {
+        logger.error('Failed to dynamically import file-type or read file for type detection', { filePath, error });
+        return undefined;
+    }
+}
+
 /**
  * Validates a file for WhatsApp sending
  */
-async function validateFile(filePath: string): Promise<{ valid: boolean; type: string; size: number; error?: string }> {
-    try {
-        const stats = await fs.promises.stat(filePath);
+async function validateFile(filePath: string): Promise<{ valid: boolean; type: string; size: number; error?: string }> {    try {        const stats = await fs.promises.stat(filePath);
         if (stats.size > MAX_FILE_SIZE) {
             return { valid: false, type: '', size: stats.size, error: 'File size exceeds WhatsApp limit of 16MB' };
         }
@@ -235,72 +243,6 @@ export async function sendDocument(
     return sendMedia(recipients, filePath, { sendAsDocument: true, filename });
 }
 
-/**
- * Gets information about a media file
- */
-export async function getMediaInfo(filePath: string): Promise<{
-    valid: boolean;
-    type: string;
-    size: number;
-    error?: string;
-    supported: boolean;
-    maxSize: number;
-}> {
-    const validation = await validateFile(filePath);
-    return {
-        ...validation,
-        supported: validation.valid,
-        maxSize: MAX_FILE_SIZE
-    };
-}
-
-export async function validateMediaFile(filePath: string): Promise<void> {
-    logger.debug('Validating media file', { filePath });
-    
-    try {
-        // Check if file exists
-        if (!fs.existsSync(filePath)) {
-            logger.error('File not found', { filePath });
-            throw new WhatsAppError('FILE_NOT_FOUND', `File not found: ${filePath}`);
-        }
-
-        // Check file size
-        const stats = await fs.promises.stat(filePath);
-        if (stats.size > MAX_FILE_SIZE) {
-            logger.error('File too large', { 
-                filePath,
-                size: stats.size,
-                maxSize: MAX_FILE_SIZE
-            });
-            throw new WhatsAppError('FILE_TOO_LARGE', `File size exceeds maximum limit of ${MAX_FILE_SIZE / (1024 * 1024)}MB`);
-        }
-
-        // Check file type
-        const mimeType = await getMimeType(filePath);
-        if (!SUPPORTED_MEDIA_TYPES.image.includes(mimeType) && !SUPPORTED_MEDIA_TYPES.video.includes(mimeType) && !SUPPORTED_MEDIA_TYPES.audio.includes(mimeType) && !SUPPORTED_MEDIA_TYPES.document.includes(mimeType)) {
-            logger.error('Unsupported file type', { 
-                filePath,
-                mimeType,
-                supportedTypes: SUPPORTED_MEDIA_TYPES
-            });
-            throw new WhatsAppError('UNSUPPORTED_FILE_TYPE', `Unsupported file type: ${mimeType}`);
-        }
-
-        logger.info('Media file validation successful', { 
-            filePath,
-            size: stats.size,
-            mimeType
-        });
-    } catch (error) {
-        if (error instanceof WhatsAppError) {
-            throw error;
-        }
-        logger.error('Media validation failed', {
-            error: error instanceof Error ? error.message : 'Unknown error'
-        });
-        throw new WhatsAppError('MEDIA_VALIDATION_FAILED', 'Failed to validate media file');
-    }
-}
 
 async function getMimeType(filePath: string): Promise<string> {
     try {
@@ -312,76 +254,6 @@ async function getMimeType(filePath: string): Promise<string> {
             error: error instanceof Error ? error.message : 'Unknown error'
         });
         throw new WhatsAppError('MIME_TYPE_DETECTION_FAILED', 'Failed to detect file type');
-    }
-}
-
-export async function createMediaMessage(filePath: string, caption?: string): Promise<MessageMedia> {
-    logger.debug('Creating media message', { filePath, hasCaption: !!caption });
-    
-    try {
-        await validateMediaFile(filePath);
-        
-        const media = await MessageMedia.fromFilePath(filePath);
-        
-        logger.info('Media message created successfully', {
-            filePath,
-            mimeType: media.mimetype,
-            hasCaption: !!caption
-        });
-        
-        return media;
-    } catch (error) {
-        logger.error('Failed to create media message', {
-            filePath,
-            error: error instanceof Error ? error.message : 'Unknown error'
-        });
-        throw error;
-    }
-}
-
-export async function downloadMedia(message: any, outputDir: string): Promise<string> {
-    logger.debug('Downloading media', { 
-        messageId: message.id.id,
-        outputDir
-    });
-    
-    try {
-        if (!message.hasMedia) {
-            logger.error('Message has no media', { messageId: message.id.id });
-            throw new WhatsAppError('NO_MEDIA', 'Message does not contain media');
-        }
-
-        // Create output directory if it doesn't exist
-        if (!fs.existsSync(outputDir)) {
-            await fs.promises.mkdir(outputDir, { recursive: true });
-            logger.debug('Created output directory', { outputDir });
-        }
-
-        const media = await message.downloadMedia();
-        if (!media) {
-            logger.error('Failed to download media', { messageId: message.id.id });
-            throw new WhatsAppError('DOWNLOAD_FAILED', 'Failed to download media');
-        }
-
-        const ext = media.mimetype.split('/')[1] || 'bin';
-        const filename = `media_${message.id.id}_${Date.now()}.${ext}`;
-        const filePath = path.join(outputDir, filename);
-
-        await fs.promises.writeFile(filePath, media.data, 'base64');
-        
-        logger.info('Media downloaded successfully', {
-            messageId: message.id.id,
-            filePath,
-            mimeType: media.mimetype
-        });
-        
-        return filePath;
-    } catch (error) {
-        logger.error('Media download failed', {
-            messageId: message.id.id,
-            error: error instanceof Error ? error.message : 'Unknown error'
-        });
-        throw error;
     }
 }
 
